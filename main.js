@@ -1,4 +1,5 @@
-// === HP ILO 4 Version 2.81
+// === Updated : 29.06.2025
+// === for HP ILO 4 Version 2.81
 // === Script zum Auslesen der Serverwerte
 // === Lucifor 1976 im Juni 2025
 
