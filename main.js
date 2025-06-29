@@ -184,10 +184,12 @@ async function fetchFirmware() {
     try {
         const res = await axios.get(`https://${iloIP}/rest/v1/Managers/1`, { headers, httpsAgent: agent });
         const fw = res.data;
-        const map = {
-            iLOFirmwareVersion: fw.Firmware?.Current?.VersionString,
-            iLODate: fw.Firmware?.Current?.Date
-        };
+                const map = {
+                iLOFirmwareVersion: fw.Firmware?.Current?.VersionString
+                };
+                if (typeof fw.Firmware?.Current?.Date === 'string') {
+                map.iLODate = fw.Firmware.Current.Date;
+                };
         for (const [key, val] of Object.entries(map)) {
             const dp = dpPrefix + 'firmware.' + sanitizeId(key);
             createState(dp, '', { name: key, type: 'string', role: 'text', read: true, write: false }, () => {
