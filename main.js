@@ -339,6 +339,68 @@ async function fetchDisks() {
     }
 }
 
+// === RAID-Konfiguration & SMART-Werte (NEU)
+async function fetchRaidAndSmart() {
+    try {
+        const ctrlRes = await axios.get(`https://${iloIP}/rest/v1/Systems/1/SmartStorage/ArrayControllers/0`, { headers, httpsAgent: agent });
+
+        if (!ctrlRes?.data || typeof ctrlRes.data !== 'object') {
+            log('RAID/SMART: Ungültige oder fehlende Controller-Daten.', 'warn');
+            return;
+        }
+
+        const raidDP = dpPrefix + 'raid.Configuration';
+        createState(raidDP, '', {
+            name: 'RAID Konfiguration',
+            type: 'string',
+            role: 'text',
+            read: true,
+            write: false
+        }, () => {
+            const confText = `Model: ${ctrlRes.data.Model}\nFirmware: ${ctrlRes.data.FirmwareVersion}\nStatus: ${ctrlRes.data.Status?.Health}`;
+            setState(raidDP, confText, true);
+        });
+
+        const smartURL = ctrlRes.data?.links?.LogicalDrives?.href || ctrlRes.data?.Links?.LogicalDrives?.href;
+
+        if (!smartURL) {
+            log('Keine LogicalDrives-Verlinkung gefunden.', 'warn');
+            return;
+        }
+
+        const smartRes = await axios.get(`https://${iloIP}${smartURL}`, { headers, httpsAgent: agent });
+        const members = smartRes.data.Members || [];
+
+        for (let i = 0; i < members.length; i++) {
+            const driveURL = members[i]['@odata.id'];
+            const detail = await axios.get(`https://${iloIP}${driveURL}`, { headers, httpsAgent: agent });
+            const smartDP = dpPrefix + `smart.LogicalDrive_${i + 1}`;
+
+            const map = {
+                RaidLevel: detail.data.Raid,
+                CapacityMiB: detail.data.CapacityMiB,
+                Status: `${detail.data.Status?.Health} / ${detail.data.Status?.State}`
+            };
+
+            for (const [key, val] of Object.entries(map)) {
+                const dp = smartDP + '.' + sanitizeId(key);
+                createState(dp, '', {
+                    name: key,
+                    type: typeof val === 'number' ? 'number' : 'string',
+                    role: 'text',
+                    read: true,
+                    write: false
+                }, () => {
+                    setState(dp, val, true);
+                });
+            }
+        }
+
+    } catch (e) {
+        log(`RAID/SMART Fehler: ${e.message}`, 'error');
+    }
+}
+
 // === Hauptausführung
 async function readILO() {
     await fetchThermal();
@@ -348,6 +410,7 @@ async function readILO() {
     await fetchNetwork();
     await fetchBios();
     await fetchDisks();
+    await fetchRaidAndSmart();
 }
 
 // === Start & Intervall
