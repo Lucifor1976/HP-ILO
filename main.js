@@ -99,6 +99,7 @@ async function fetchSystemInfo() {
     try {
         const res = await axios.get(`https://${iloIP}/rest/v1/Systems/1`, { headers, httpsAgent: agent });
         const sys = res.data;
+        log('System Data erfolgreich abgerufen.', 'info');
         const map = {
             Model: sys.Model,
             SerialNumber: sys.SerialNumber,
@@ -120,6 +121,7 @@ async function fetchPower() {
     try {
         const res = await axios.get(`https://${iloIP}/rest/v1/Chassis/1/Power`, { headers, httpsAgent: agent });
         const pwr = res.data;
+        log('PSU Data erfolgreich abgerufen.', 'info');
 
         // DEBUG
         log('Power-Datenstruktur: ' + JSON.stringify(pwr, null, 2), 'debug');
@@ -185,6 +187,7 @@ async function fetchFirmware() {
     try {
         const res = await axios.get(`https://${iloIP}/rest/v1/Managers/1`, { headers, httpsAgent: agent });
         const fw = res.data;
+        log('Firmware Data erfolgreich abgerufen.', 'info');
                 const map = {
                 iLOFirmwareVersion: fw.Firmware?.Current?.VersionString
                 };
@@ -207,6 +210,7 @@ async function fetchNetwork() {
     try {
         const res = await axios.get(`https://${iloIP}/rest/v1/Managers/1/EthernetInterfaces/1`, { headers, httpsAgent: agent });
         const net = res.data;
+        log('Network Data erfolgreich abgerufen.', 'info');
         const map = {
             MACAddress: net.MACAddress,
             IPv4: net.IPv4?.[0]?.Address
@@ -284,28 +288,24 @@ async function fetchBios() {
     }
 }
 
-// === Festplatten (optional, wird abgefangen bei 404)
+// === Festplatten auslesen (iLO4, Controller 0)
 async function fetchDisks() {
     try {
-        const res = await axios.get(`https://${iloIP}/rest/v1/Systems/1/SmartStorage/ArrayControllers/0/PhysicalDrives`, {
-            headers,
-            httpsAgent: agent
-        });
-
-        if (!res.data || !Array.isArray(res.data.Members)) {
-            log('Keine Festplattendaten verfügbar oder API nicht unterstützt.', 'warn');
+        const ctrlRes = await axios.get(`https://${iloIP}/rest/v1/Systems/1/SmartStorage/ArrayControllers/0`, { headers, httpsAgent: agent });
+        const drivesUrl = ctrlRes.data.links?.PhysicalDrives?.href || ctrlRes.data.Links?.PhysicalDrives?.href;
+        log('Disks Data erfolgreich abgerufen.', 'info');
+        
+        if (!drivesUrl) {
+            log('Keine PhysicalDrives-Verlinkung gefunden.', 'warn');
             return;
         }
 
-        const drives = res.data.Members;
+        const res = await axios.get(`https://${iloIP}${drivesUrl}`, { headers, httpsAgent: agent });
+        const members = res.data.Members || [];
 
-        for (let i = 0; i < drives.length; i++) {
-            const driveUrl = drives[i]['@odata.id'];
-            const detail = await axios.get(`https://${iloIP}${driveUrl}`, {
-                headers,
-                httpsAgent: agent
-            });
-
+        for (let i = 0; i < members.length; i++) {
+            const driveUrl = members[i]['@odata.id'];
+            const detail = await axios.get(`https://${iloIP}${driveUrl}`, { headers, httpsAgent: agent });
             const d = detail.data;
             const prefix = dpPrefix + `disks.Drive_${i + 1}`;
 
@@ -331,11 +331,7 @@ async function fetchDisks() {
         }
 
     } catch (e) {
-        if (e.response?.status === 404) {
-            log('Festplatten-API wird von dieser iLO-Version nicht unterstützt.', 'warn');
-        } else {
-            log(`Festplatten-Fehler: ${e.message}`, 'error');
-        }
+        log(`Festplatten-Fehler: ${e.message}`, 'error');
     }
 }
 
@@ -343,7 +339,8 @@ async function fetchDisks() {
 async function fetchRaidAndSmart() {
     try {
         const ctrlRes = await axios.get(`https://${iloIP}/rest/v1/Systems/1/SmartStorage/ArrayControllers/0`, { headers, httpsAgent: agent });
-
+        log('Raid Data erfolgreich abgerufen.', 'info');
+        
         if (!ctrlRes?.data || typeof ctrlRes.data !== 'object') {
             log('RAID/SMART: Ungültige oder fehlende Controller-Daten.', 'warn');
             return;
