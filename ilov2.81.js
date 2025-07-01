@@ -13,7 +13,7 @@ const telegramUser     = 'TELEGRAMNUTZER'; // Nutzer für Benachrichtigungen
 const alexaDP          = 'alexa2.0.Echo-Devices.XXXXXXXXXXXXXXX.Commands.speak'; // Echo Device für Critical Ansangen
 
 const tempLimitCPU     = 70;
-const dpPrefix         = 'javascript.0.ilo4-testing.'; // Datenpunkt unter der die Werte angelegt werden sollen
+const dpPrefix         = 'javascript.0.ilo4-testing.'; // CHANGEME, Datenpunkt unter der die Werte angelegt werden sollen
 
 const axios = require('axios');
 const https = require('https');
