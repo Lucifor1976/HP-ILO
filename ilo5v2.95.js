@@ -222,18 +222,47 @@ async function fetchBios(token, cookie) {
         const res = await rfGet(`https://${iloIP}/redfish/v1/Systems/1/Bios/Settings`, token, cookie);
         const bios = res.data;
         let dumpText = '🧬 BIOS-Felder:\n';
+
         for (const [key, val] of Object.entries(bios)) {
+            // Spezialbehandlung für das 'Attributes'-Objekt
+            if (key === 'Attributes' && typeof val === 'object' && val !== null) {
+                dumpText += `• ${key}:\n`;
+                for (const [attrKey, attrVal] of Object.entries(val)) {
+                    const attrDp = dpPrefix + 'bios.' + sanitizeId(attrKey);
+                    const attrType = typeof attrVal === 'boolean' ? 'boolean' : typeof attrVal === 'number' ? 'number' : 'string';
+                    dumpText += `   - ${attrKey}: ${attrVal}\n`;
+                    createState(attrDp, '', {
+                        name: attrKey,
+                        type: attrType,
+                        role: 'text',
+                        read: true,
+                        write: false
+                    }, () => setState(attrDp, attrVal, true));
+                }
+                continue; // Vermeide doppeltes Erstellen von 'Attributes' als Ganzes
+            }
+
+            // Standardbehandlung für andere BIOS-Felder
             const dp = dpPrefix + 'bios.' + sanitizeId(key);
-            const valueType = typeof val === 'boolean' ? 'boolean' : (typeof val === 'number' ? 'number' : 'string');
+            const valueType =
+                typeof val === 'boolean' ? 'boolean' :
+                typeof val === 'number' ? 'number' :
+                typeof val === 'object' && val !== null && !Array.isArray(val) ? 'object' :
+                Array.isArray(val) ? 'array' :
+                'string';
             dumpText += `• ${key}: ${val}\n`;
+
             createState(dp, '', {
-                name: key, type: valueType, role: 'text', read: true, write: false
+                name: key,
+                type: valueType,
+                role: 'text',
+                read: true,
+                write: false
             }, () => setState(dp, val, true));
         }
-        const dumpDP = dpPrefix + 'bios.__dump';
-        createState(dumpDP, '', {
-            name: 'Alle BIOS-Werte (Text)', type: 'string', role: 'text', read: true, write: false
-        }, () => setState(dumpDP, dumpText.trim(), true));
+
+
+
         log('BIOS-Settings erfolgreich abgerufen.', 'info');
     } catch (e) {
         if (e.response?.status === 404) {
@@ -243,6 +272,7 @@ async function fetchBios(token, cookie) {
         }
     }
 }
+
 /***** Festplatten (Smart Storage/Drives) *****/
 async function fetchDisks(token, cookie) {
     try {
