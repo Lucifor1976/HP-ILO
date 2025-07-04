@@ -226,59 +226,54 @@ async function fetchNetwork() {
     }
 }
 
-// === BIOS-Settings
-async function fetchBios() {
+/***** BIOS-Settings (Redfish) *****/
+async function fetchBios(token, cookie) {
     try {
-        const res = await axios.get(`https://${iloIP}/rest/v1/Systems/1/Bios/Settings`, { headers, httpsAgent: agent });
+        const res = await rfGet(`https://${iloIP}/redfish/v1/Systems/1/Bios/Settings`, token, cookie);
         const bios = res.data;
-
         let dumpText = '🧬 BIOS-Felder:\n';
 
         for (const [key, val] of Object.entries(bios)) {
-            try {
-                const dp = dpPrefix + 'bios.' + sanitizeId(key);
-                const valueType = typeof val === 'boolean' ? 'boolean' :
-                                  (typeof val === 'number' ? 'number' : 'string');
-
-                // Optional Log-Ausgabe
-                dumpText += `• ${key}: ${val}\n`;
-
-                createState(dp, '', {
-                    name: key,
-                    type: valueType,
-                    role: 'text',
-                    read: true,
-                    write: false
-                }, () => {
-                    try {
-                        setState(dp, val, true);
-                    } catch (e) {
-                        log(`⚠️ setState-Fehler bei BIOS-Feld "${key}": ${e.message}`, 'warn');
-                    }
-                });
-
-            } catch (e) {
-                log(`⚠️ createState-Fehler bei BIOS-Feld "${key}": ${e.message}`, 'warn');
+            // Spezialbehandlung für das 'Attributes'-Objekt
+            if (key === 'Attributes' && typeof val === 'object' && val !== null) {
+                dumpText += `• ${key}:\n`;
+                for (const [attrKey, attrVal] of Object.entries(val)) {
+                    const attrDp = dpPrefix + 'bios.' + sanitizeId(attrKey);
+                    const attrType = typeof attrVal === 'boolean' ? 'boolean' : typeof attrVal === 'number' ? 'number' : 'string';
+                    dumpText += `   - ${attrKey}: ${attrVal}\n`;
+                    createState(attrDp, '', {
+                        name: attrKey,
+                        type: attrType,
+                        role: 'text',
+                        read: true,
+                        write: false
+                    }, () => setState(attrDp, attrVal, true));
+                }
+                continue; // Vermeide doppeltes Erstellen von 'Attributes' als Ganzes
             }
+
+            // Standardbehandlung für andere BIOS-Felder
+            const dp = dpPrefix + 'bios.' + sanitizeId(key);
+            const valueType =
+                typeof val === 'boolean' ? 'boolean' :
+                typeof val === 'number' ? 'number' :
+                typeof val === 'object' && val !== null && !Array.isArray(val) ? 'object' :
+                Array.isArray(val) ? 'array' :
+                'string';
+            dumpText += `• ${key}: ${val}\n`;
+
+            createState(dp, '', {
+                name: key,
+                type: valueType,
+                role: 'text',
+                read: true,
+                write: false
+            }, () => setState(dp, val, true));
         }
 
-        // Ausgabe ins Log
-        log(dumpText, 'info');
 
-        // Optional auch als Textdatenpunkt
-        const dumpDP = dpPrefix + 'bios.__dump';
-        createState(dumpDP, '', {
-            name: 'Alle BIOS-Werte (Text)',
-            type: 'string',
-            role: 'text',
-            read: true,
-            write: false
-        }, () => {
-            setState(dumpDP, dumpText.trim(), true);
-        });
 
         log('BIOS-Settings erfolgreich abgerufen.', 'info');
-
     } catch (e) {
         if (e.response?.status === 404) {
             log('BIOS-Settings-API wird von dieser iLO-Version nicht unterstützt.', 'warn');
